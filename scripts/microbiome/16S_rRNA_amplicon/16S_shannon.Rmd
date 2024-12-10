@@ -1,0 +1,274 @@
+---
+title: "Shanon index (alpha diversity)"
+author: "Hauschild et al. 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message=FALSE)
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(nlme)
+library(ggpubr)
+```
+
+# Data import
+
+```{r}
+# Data import
+dat <- read.csv2("df_psO_WP3_16S_alpha_estimates.csv",
+                 sep=";",
+                 dec=".") %>% 
+        mutate(replicate=factor(replicate),
+               table="1",
+               Evenness=Shannon/log(Observed))
+
+# blocks c and d were placed on table 2
+dat$table[which(dat$block=="C")] <- "2"
+dat$table[which(dat$block=="D")] <- "2"
+
+str(dat)
+```
+
+
+# Grafical overview
+
+```{r cache=TRUE}
+# Grafical overview
+
+ggplot(dat, aes(x=rootstock, y=Shannon))+
+        theme_bw()+
+        geom_jitter(aes(fill = Evenness,
+                        shape=soil_type),
+                    width=0.2,
+                    size=3,
+                    alpha=0.9)+
+        facet_nested(table+block~site)+
+        scale_shape_manual(values=c(21,22,23))+
+        scale_fill_gradient(low = "yellow", 
+                            high = "red",
+                            limits=c(0.86, 0.92))+
+        scale_y_continuous(breaks=seq(6.3, 7.5, 0.3),
+                           labels=seq(6.3, 7.5, 0.3),
+                           limits = c(6.2, 7.5))
+
+
+```
+
+# Modelling
+
+## Linear mixed models with lme4::lmer
+
+To be in line with other models, a mixed model with the randomization structure 
+as well as its interaction terms with both main factors was fit to the data.
+```{r cache=TRUE}
+# Fit mixed model on response scale
+fit <- lmer(Shannon ~ rootstock*site +
+                    (1|table) + (1|table:block)+
+                    (1|table:rootstock) + (1|table:block:rootstock)+
+                    (1|table:site) + (1|table:block:site),
+            data=dat)
+```
+
+The interactions between the main factors and the table play a role in the 
+ data.
+```{r}
+print(VarCorr(fit) ,comp=c("Variance","Std.Dev."), digits=2)
+```
+
+Problem: Variance is not homogeneous, but decreases with increasing fitted values.
+```{r}
+plot(fit)
+```
+
+To overcome the problem of heterogenious variance the Shannon indices were exp-transformed
+before modelling (according to Pallmann et al. ...).
+```{r cache=TRUE}
+# Fit mixed model on exp scale
+fit_exp <- lmer(exp(Shannon) ~ rootstock*site +
+                        (1|table) + (1|table:block)+
+                        (1|table:rootstock) + (1|table:block:rootstock)+
+                        (1|table:site) + (1|table:block:site),
+                data=dat)
+```
+
+The interactions between the main factors and the table play a role in the 
+ data.
+```{r}
+print(VarCorr(fit_exp) ,comp=c("Variance","Std.Dev."), digits=2)
+```
+
+But, the prpoblem with heterogeneous residual variance does not disappear. 
+This is the same for other common tranformations, such as sqrt or log (not shown).
+```{r}
+plot(fit_exp)
+```
+
+## Linear mixed model with nlme::lme
+
+Based on `nlme::lme()` a mixed model was with that allows for heterogeneous residual
+variance between treatment groups. Since `lme()` only allows a hierarchical structure
+in the random effects, the tables, bocks nested in tables and the interaction 
+rootstock:site nested in blocks and tables was models as random factors.
+
+```{r cache=TRUE}
+# Combination of rootstock and site
+dat$rs_inter <- droplevels(factor(dat$rootstock) : factor(dat$site))
+
+# Fit the model
+fit_nlme <- lme(fixed = Shannon ~ rootstock + site + rootstock:site,
+                data = dat, 
+                random = ~ 1|table/block/rs_inter,
+                weights = varIdent(form = ~ 1|rootstock*site),
+                method = "REML")
+```
+
+All random effects play a role.
+```{r}
+VarCorr(fit_nlme)
+```
+
+Residual variance is homogeneous.
+```{r}
+plot(fit_nlme)
+```
+
+# ANOVA
+
+```{r}
+anova(fit_nlme)
+```
+
+Both main factors play a role but the interaction is not significant.
+
+# Multiple mean comparisons
+
+## Mean comparisons between differend rootstocks
+```{r cache=TRUE}
+# mean comparisons between rootstocks
+comp_root <- emmeans(fit_nlme,
+                     specs = "rootstock",
+                     contr = "pairwise",
+                     adjust = "mvt",
+                     type="response")
+```
+
+
+```{r}
+means_root <- data.frame(comp_root$emmeans)
+means_root
+```
+
+```{r}
+contr_root <- data.frame(confint(comp_root$contrasts))
+contr_root
+```
+
+\newpage
+
+Figure \ref{fig_shannon_root} provides an overview about the average Shannon index per
+root stock. The average Shannon index differs between M2 and Mal0739 as well as between
+Mal0130 and Mal0739. 
+
+```{r echo=FALSE, fig.width=10, fig.height=6, fig.cap = "\\label{fig_shannon_root} Shannon index based on the root stocks. A: Average index for each root stock. B: Mean differences. Black bars: 95 % confidence intervals (mvt-adjusted for the mean differences in B). Horizontal line = Visualisation of the null hypothesis."}
+
+plot_means_root <- ggplot(dat, aes(x=rootstock, y=Shannon))+
+        theme_bw()+
+        geom_jitter(aes(fill = Evenness,
+                        shape=site),
+                    width=0.2,
+                    size=3,
+                    alpha=0.9)+
+        geom_pointrange(data=means_root,
+                        aes(x=rootstock, 
+                            y=emmean,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        scale_shape_manual(values=c(21,22,23))+
+        scale_fill_gradient(low = "yellow", 
+                            high = "red",
+                            limits=c(0.86, 0.92))+
+        xlab("Shannon index")+
+        ylab("Rootstock")+
+        ggtitle("A: Mean Shannon index for rootstocks")
+
+plot_contr_root <- ggplot(contr_root,
+                          aes(x=contrast))+
+        theme_bw()+
+        geom_pointrange(aes(y=estimate,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept=0)+
+        ggtitle("B: Mean comparisons")
+        
+
+
+ggarrange(plot_means_root,
+          plot_contr_root)
+```
+
+## Mean comparisons between differend sites
+
+```{r cache=TRUE}
+# mean comparisons between rootstocks
+comp_site <- emmeans(fit_nlme,
+                     specs = "site",
+                     contr = "pairwise",
+                     adjust = "mvt",
+                     type="response")
+```
+
+
+```{r}
+means_site <- data.frame(comp_site$emmeans)
+means_site
+```
+
+```{r}
+contr_site <- data.frame(confint(comp_site$contrasts))
+contr_site
+```
+
+Figure \ref{fig_shannon_sites} provides an overview about the average Shannon index per
+site. The average Shannon index differs only between Ellerhoop and Heidgraben. 
+
+```{r echo=FALSE, fig.width=10, fig.height=6, fig.cap = "\\label{fig_shannon_sites} Shannon index based on the sites. A: Average index for each site. B: Mean differences. Black bars: 95 % confidence intervals (mvt-adjusted for the mean differences in B). Horizontal line = Visualisation of the null hypothesis."}
+
+plot_means_site <- ggplot(dat, aes(x=site, y=Shannon))+
+        theme_bw()+
+        geom_jitter(aes(fill = Evenness,
+                        shape=rootstock),
+                    width=0.2,
+                    size=3,
+                    alpha=0.9)+
+        geom_pointrange(data=means_site,
+                        aes(x=site, 
+                            y=emmean,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        scale_shape_manual(values=c(21,22,23))+
+        scale_fill_gradient(low = "yellow", 
+                            high = "red",
+                            limits=c(0.86, 0.92))+
+        xlab("Shannon index")+
+        ylab("Rootstock")+
+        ggtitle("A: Mean Shannon index for rootstocks")
+
+plot_contr_site <- ggplot(contr_site,
+                          aes(x=contrast))+
+        theme_bw()+
+        geom_pointrange(aes(y=estimate,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept=0)+
+        ggtitle("B: Mean comparisons")
+        
+
+
+ggarrange(plot_means_site,
+          plot_contr_site)
+```
