@@ -1,0 +1,201 @@
+---
+title: "Shannon index for fungi"
+author: "Hauschild et al. 2024"
+date: "2024-12-03"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, 
+                      message=FALSE)
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(nlme)
+library(ggpubr)
+```
+
+# Data import
+
+```{r eval=FALSE}
+library(tidyverse)
+library(ggh4x)
+library(lme4)
+library(lmerTest)
+library(emmeans)
+library(nlme)
+library(ggpubr)
+```
+
+
+```{r}
+# Data import
+dat <- read.csv2("df_psO_WP3_ITS_alpha_estimates.csv",
+                 sep=";",
+                 dec=".") %>% 
+        mutate(replicate=factor(replicate),
+               table="1",
+               Evenness=Shannon/log(Observed))
+
+# blocks c and d were placed on table 2
+dat$table[which(dat$block=="C")] <- "2"
+dat$table[which(dat$block=="D")] <- "2"
+
+str(dat)
+```
+
+
+# Grafical overview
+
+```{r cache=TRUE, echo=FALSE}
+# Grafical overview
+
+ggplot(dat, aes(x=rootstock, y=Shannon))+
+        theme_bw()+
+        geom_jitter(aes(fill = Evenness,
+                        shape=soil_type),
+                    width=0.2,
+                    size=3,
+                    alpha=0.9)+
+        facet_nested(table+block~site)+
+        scale_shape_manual(values=c(21,22,23))+
+        scale_fill_gradient2(low = "blue", 
+                            mid = "white",
+                            high = "red",
+                            midpoint = 0.725,
+                            limits=c(0.50, 0.95))
+
+
+```
+
+# Modelling
+
+## Linear mixed model with nlme::lme
+
+In order to be in line with the analysis regarding the Shannon indices for the bacterial
+community, also the alpha diversity of the fungi community was modelled based
+on `nlme::lme()`. The same mixed model was fit, to allow for heterogeneous residual
+variance between treatment groups. Since `lme()` only allows a hierarchical structure
+in the random effects, the tables, bocks nested in tables and the interaction 
+rootstock:site nested in blocks and tables was models as random factors.
+
+```{r cache=TRUE}
+# Combination of rootstock and site
+dat$rs_inter <- droplevels(factor(dat$rootstock) : factor(dat$site))
+
+# Fit the model
+fit_nlme <- lme(fixed = Shannon ~ rootstock + site + rootstock:site,
+                data = dat, 
+                random = ~ 1|table/block/rs_inter,
+                weights = varIdent(form = ~ 1|rootstock*site),
+                method = "REML")
+```
+
+All random effects play a role, but residual variance is dominating.
+```{r}
+VarCorr(fit_nlme)
+```
+
+Residual variance is homogeneous.
+```{r}
+plot(fit_nlme)
+```
+
+# ANOVA
+
+```{r}
+anova(fit_nlme)
+```
+
+The interaction between rootstock and site is significant.
+
+
+# Multiple mean comparisons for the two way interaction
+
+```{r cache=TRUE}
+# Simple contrasts
+comp_rs <- emmeans(fit_nlme,
+                   specs = "rootstock",
+                   by="site",
+                   contr = "pairwise",
+                   adjust = "mvt",
+                   type="response")
+```
+
+```{r}
+means_rs <- data.frame(comp_rs$emmeans)
+means_rs
+```
+
+
+```{r}
+ggplot(dat, aes(x=rootstock, y=Shannon))+
+        theme_bw()+
+        geom_jitter(aes(fill = Evenness,
+                        shape=soil_type),
+                    width=0.2,
+                    size=3,
+                    alpha=0.9)+
+        geom_pointrange(data=means_rs,
+                        aes(y=emmean,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        facet_nested(~site)+
+        scale_shape_manual(values=c(21,22,23))+
+        scale_fill_gradient2(low = "blue", 
+                            mid = "white",
+                            high = "red",
+                            midpoint = 0.725,
+                            limits=c(0.50, 0.95))
+```
+
+```{r}
+contr_rs <- data.frame(comp_rs$contrasts)
+contr_rs
+```
+
+```{r}
+plot(confint(comp_rs$contrasts))+
+        theme_bw()+
+        geom_vline(xintercept=1)
+```
+
+```{r}
+# Interaction contrasts
+means_inter_rs <- emmeans(fit_nlme,
+                       specs= ~ rootstock:site,
+                       type="response")
+
+means_inter_rs
+
+```
+
+```{r}
+# Interaction contrasts
+comp_inter_rs <- contrast(means_inter_rs,
+                       interaction=c(rootstock="pairwise", 
+                                     site="pairwise"),
+                       adj="mvt",
+                       type="response") 
+
+comp_inter_rs
+```
+
+
+```{r}
+plot(confint(comp_inter_rs))+
+        theme_bw()+
+        geom_vline(xintercept=1)
+```
+
+
+
+
+
+
+
+
+
+
