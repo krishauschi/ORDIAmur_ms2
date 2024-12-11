@@ -1,0 +1,555 @@
+---
+title: "Root fresh mass"
+author: "Hauschild et al. 2024"
+date: "2024-11-22"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE)
+library(tidyverse)
+library(lme4)
+library(ggpubr)
+library(lmerTest)
+library(emmeans)
+```
+
+# Data import
+
+```{r eval=FALSE}
+# Load necessary packages 
+library(tidyverse)
+library(lme4)
+library(ggpubr)
+library(lmerTest)
+library(emmeans)
+```
+
+The data set WP3.csv is available at the **Bonares repo xy (insert link or DOI)**
+```{r}
+# Data import
+dat <- read.csv2("WP3.csv",
+                 strip.white = TRUE) %>% 
+        mutate(Genotype=factor(Genotype),
+               Soil=factor(Soil),
+               Treat=factor(Treat, levels=c("ARD", "G")),
+               Plant=factor(Plant),
+               Block=factor(Block),
+               Table=factor(Table)) %>% 
+        na.omit()
+
+# Overview about data set
+str(dat)
+```
+\newpage
+
+# Linear mixed model
+
+A linear mixed model is fit in which the ln-transformed root fresh mass depends on 
+the soil, the different genotypes, the different treatments and their possible 
+two-way and three-way interactions as fixed effects. The tables, the blocks and
+their interactions with the main effects were modeled as random effects.
+```{r}
+# Fit the model
+fit_RFM <- lmer(log(RFM) ~ Soil*Genotype*Treat + 
+                        (1|Table) + 
+                        (1|Table:Block)+
+                        (1|Table:Soil)+ (1|Table:Genotype)+ (1|Table:Treat)+
+                        (1|Table:Block:Soil)+ (1|Table:Block:Genotype)+
+                        (1|Table:Block:Treat), 
+                data=dat)
+```
+
+### Model diagnostic
+```{r}
+# Residuals vs. fitted plot
+plot(fit_RFM)
+```
+
+The residuals are evenly distributed around the 0. It seems that assumptions are med.
+\newpage
+
+### Variance components
+
+```{r}
+print(VarCorr(fit_RFM) ,comp=c("Variance","Std.Dev."), digits=2)
+```
+
+Residual variance explains roughly 97 % of the total variance in the data, meaning
+that there were only few deviations between the blocks (which explain roughly 
+0.008 % of the total variance.)
+
+
+## ANOVA
+
+Type 3 Anova with K-R approximation of degrees of freedom.
+
+```{r cache=TRUE}
+anova(fit_RFM, ddf = "Kenward-Roger")
+```
+
+The treatment (ARD substrate vs.  gamma irradiated substrate) alone explains roughly
+two thirds of the sum of squares and therefore having the strongest effect on 
+root fresh mass. Compared to the treatment, all other model terms (including the 
+interactions) are of minor importance, but are also significant (except the three
+way interaction).
+This means that at least two genotypes differ with respect to their root fresh mass 
+depending on the soil, at least two genotypes react differently with respect to 
+the treatment and the fresh mass per treatment depends on the soils as well, but
+no differences between the treatment can be found in each combination of the 
+six soils and the six genotypes.
+
+
+\newpage 
+
+# Multiple mean comparisons
+
+All multiple mean comparisons were calculated on ln-scale, but back-transformed to
+response scale for easier interpretation. Back transformation changes the hypothesis
+$H_0: ln(\mu_i) - ln(\mu_{i'}) = 0$ to $H_0: exp(ln(\mu_i) - ln(\mu_{i'})) = \mu_i / \mu_{i'} = 1$.
+All contrast tests were adjusted using the multivariate t-distribution following
+Hothorn et al. 2008. 
+
+## Treatment genotype interaction
+
+```{r cache=TRUE}
+# Treatments within genotypes
+# Simple contrasts: Main effect for treatment (ARD/G)  + treatment:genotype effects 
+# averaged over soils
+
+comp_RFM_treat <- emmeans(fit_RFM, 
+                    specs="Treat", 
+                    by="Genotype",
+                    contr="pairwise",
+                    adjust="mvt",
+                    type="response")
+```
+
+```{r}
+# Means and their pointwise 95% confidence intervals
+means_RFM_treat <- data.frame(comp_RFM_treat$emmeans)
+means_RFM_treat 
+```
+
+
+```{r}
+# Contrasts, p-values etc.
+contr_RFM_treat <- data.frame(comp_RFM_treat$contrasts)
+contr_RFM_treat
+```
+\newpage
+
+
+```{r cache=TRUE}
+# Interaction contrasts (ARD / G) between genotypes
+# estimates, p-values etc.
+inter_means_treat <- emmeans(fit_RFM, specs=c("Treat", "Genotype"))
+
+inter_cont_treat <- contrast(inter_means_treat,
+                       interaction=c(Treat="pairwise", Genotype="pairwise"),
+                       adj="mvt",
+                       type="response") 
+inter_cont_treat
+```
+
+\newpage
+
+```{r cache=TRUE}
+# Adjusted 95% CI for interaction contrasts
+# (ARD / G) between genotypes
+inter_cont_ci_treat <- confint(inter_cont_treat) %>% 
+        data.frame() %>% 
+        mutate(treat_pw=Treat_pairwise,
+               genotype_pw=Genotype_pairwise,
+               ratio=round(ratio, 3),
+               lower.CL=round(lower.CL, 3),
+               upper.CL=round(upper.CL, 3)) %>% 
+        select(treat_pw,    
+               genotype_pw,
+               ratio,
+               lower.CL,
+               upper.CL)
+
+inter_cont_ci_treat
+```
+
+### Overview about results
+
+The analysis of the genotype-treatment interaction is summarized in Fig. \ref{fig_geno_treat}.
+Fig \ref{fig_geno_treat}A provides and overview about the raw data, the average 
+root fresh mass per treatment within each genotype and corresponding pointwise 95 % confidence
+intervals.
+The proportional change of root freshmass between ARD and gamma irradiated substrate
+for each genotyope is given in fig \ref{fig_geno_treat}A together with
+multiplicity adjusted 95 % confidence intervals. Since the null hypothesis
+($H_0: \mu_i / \mu_{i'} = 1$) is covered by none of the confidence intervals,
+it can be deduced that in each genotype, the root fresh mass for ARD infected 
+soil is significantly lower than in gamma irradiated soil. However, the magnitude
+of root fresh mass reduction (ARD/G) differs only between genotypes M26 and AL0739
+since its adjusted 95 % confidence interval does not include the $H_0: \mu_i / \mu_{i'} = 1$
+(\ref{fig_geno_treat}C).
+
+```{r echo=FALSE, cache=TRUE, fig.width=10, fig.height=9, fig.cap = "\\label{fig_geno_treat} Analysis of the genotype treatment interaction. A: Treatment means within genotypes. B: Proportion of root fresh mass between the treatments (ARD / gARD) for each genotype. C: Comparison of fresh mass proportions between genotypes. Black bars: 95 % confidence intervals (mvt-adjusted for the tests visualised in B and C)."}
+# Graphical display of the results
+
+# Observations, means, 95% pointwise CI
+plot_RFM_1_treat <- ggplot(dat, aes(x=Treat, y=RFM))+
+        theme_bw()+
+        geom_jitter(aes(color=Soil),
+                    width=0.2,
+                    alpha=0.3)+
+        geom_pointrange(data=means_RFM_treat,
+                        aes(y=response,
+                            ymax=upper.CL,
+                            ymin=lower.CL))+
+        facet_grid( ~ Genotype)+
+        # scale_color_manual(values=c("Hg"="#DFA398",
+        #                             "Ho"="#883b41",
+        #                             "El"="#41917C",
+        #                             "Pi"="#A9D284",
+        #                             "Ru"="#505778",
+        #                             "Me"="#A0A5C0"))+
+        ylab("Root fresh mass [g]")+
+        xlab("Treatment")+
+        ggtitle("A: Treatment means")
+
+
+# Simultaneous 95 % CI for contrast G- ARD within each genotype
+ci_SMF_treat <- data.frame(confint(comp_RFM_treat$contrasts))
+
+plot_RFM_2_treat <- ggplot(ci_SMF_treat, aes(x=Genotype))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept=1)+
+        xlab("Contrast")+
+        ylab("Estimate")+
+        coord_flip()+
+        ggtitle("B: ARD/G within genotypes")
+
+
+plot_RFM_3_treat <- ggplot(inter_cont_ci_treat, aes(x=genotype_pw, y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymax=upper.CL,
+                            ymin=lower.CL))+
+        geom_hline(yintercept=1)+
+        ylab("Estimate")+
+        xlab("Contrast")+
+        coord_flip()+
+        ggtitle("C: ARD/G between genotypes")
+
+
+ggarrange(plot_RFM_1_treat,
+          ggarrange(plot_RFM_2_treat,
+                    plot_RFM_3_treat,
+                    widths = c(2:2.8)),
+          nrow=2)
+```
+
+\newpage
+
+## Soil treatment interaction
+
+```{r cache=TRUE}
+# Treatments within soils
+# Simple contrasts: Main effect for treatment (ARD/G)  + treatment:soil effects 
+# averaged over genotypes
+
+comp_RFM_soil <- emmeans(fit_RFM, 
+                    specs="Treat", 
+                    by="Soil",
+                    contr="pairwise",
+                    adjust="mvt",
+                    type="response")
+```
+
+```{r}
+# Means and their pointwise 95% confidence intervals
+means_RFM_soil <- data.frame(comp_RFM_soil$emmeans)
+means_RFM_soil
+```
+
+
+```{r}
+# Contrasts, p-values etc.
+contr_RFM_soil <- data.frame(comp_RFM_soil$contrasts)
+contr_RFM_soil
+```
+
+\newpage
+
+```{r cache=TRUE}
+# Interaction contrasts (ARD / G) between genotypes
+# estimates, p-values etc.
+inter_means_soil <- emmeans(fit_RFM, specs=c("Treat", "Soil"))
+
+inter_cont_soil <- contrast(inter_means_soil,
+                       interaction=c(Treat="pairwise", Soil="pairwise"),
+                       adj="mvt",
+                       type="response") 
+inter_cont_soil
+```
+
+\newpage
+
+```{r cache=TRUE}
+# Adjusted 95% CI for interaction contrasts
+# (ARD / G) between genotypes
+inter_cont_ci_soil <- confint(inter_cont_soil) %>% 
+        data.frame() %>% 
+        mutate(treat_pw=Treat_pairwise,
+               soil_pw=Soil_pairwise,
+               ratio=round(ratio, 3),
+               lower.CL=round(lower.CL, 3),
+               upper.CL=round(upper.CL, 3)) %>% 
+        select(treat_pw,    
+               soil_pw,
+               ratio,
+               lower.CL,
+               upper.CL)
+
+inter_cont_ci_soil
+```
+
+### Overview about results
+
+The analysis of the soil-treatment interaction is summarized in Fig. \ref{fig_soil_treat}.
+Fig \ref{fig_soil_treat}A provides an overview about the raw data, the average 
+root fresh mass per treatment within each soil and corresponding pointwise 95 % confidence
+intervals.
+The proportional change of root freshmass between ARD and gamma irradiated substrate
+for each soil is given in fig \ref{fig_soil_treat}B together with
+multiplicity adjusted 95 % confidence intervals. Since the null hypothesis
+($H_0: \mu_i / \mu_{i'} = 1$) is covered by none of the confidence intervals,
+it can be deduced that in each soil, the root fresh mass for ARD infected 
+substrate is significantly lower than in its gamma irradiated counterpart.
+The magnitude of root fresh mass reduction (ARD/G) is significantly bigger in 
+Pinneberg than in Ruthe and significantly bigger in \textbf{Co?} than in Heidgraben,
+because the corresponding confidence intervals are relatively far above the 1 
+(\ref{fig_soil_treat}C). It is unclear if the magnitude of root fresh mass reduction
+differs between Me and Ruthe as well as between Co and Ruthe and between CO and EL,
+because the Lower border of the corresponding confidence intervals is pretty close
+to the null hypothesis of 1. 
+The magnitude of root fresh mass reduction is significantly smaller in HE than in Pi, 
+in He than in Me, in El than in PI, because the complete confidence interval is lower than 
+the null hypothesis of 1. Also the magnitude of root fresh mass reduction in El
+appears to be significantly smaller than in Me, but the corresponding upper confidence 
+limit is relatively close to 1. 
+
+```{r echo=FALSE, cache=TRUE, fig.width=10, fig.height=9, fig.cap = "\\label{fig_soil_treat} Analysis of the soil treatment interaction. A: Treatment means within soils. B: Proportional change of root fresh mass between the treatments (ARD / gARD) for each soil. C: Comparison of fresh mass proportions between soils. Black bars: 95 % confidence intervals (mvt-adjusted for the tests visualised in B and C)."}
+# Graphical display of the results
+
+# Observations, means, 95% pointwise CI
+plot_RFM_1_soil <- ggplot(dat, aes(x=Treat, y=RFM))+
+        theme_bw()+
+        geom_jitter(aes(color=Genotype),
+                    width=0.2,
+                    alpha=0.3)+
+        geom_pointrange(data=means_RFM_soil,
+                        aes(y=response,
+                            ymax=upper.CL,
+                            ymin=lower.CL))+
+        facet_grid( ~ Soil)+
+        # scale_color_manual(values=c("Hg"="#DFA398",
+        #                             "Ho"="#883b41",
+        #                             "El"="#41917C",
+        #                             "Pi"="#A9D284",
+        #                             "Ru"="#505778",
+        #                             "Me"="#A0A5C0"))+
+        ylab("Root fresh mass [g]")+
+        xlab("Treatment")+
+        ggtitle("A: Treatment means")
+
+
+# Simultaneous 95 % CI for contrast G- ARD within each genotype
+ci_SMF_soil <- data.frame(confint(comp_RFM_soil$contrasts))
+
+plot_RFM_2_soil <- ggplot(ci_SMF_soil, aes(x=Soil))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept=1)+
+        xlab("Contrast")+
+        ylab("Estimate")+
+        coord_flip()+
+        ggtitle("B: ARD/G within genotypes")
+
+
+plot_RFM_3_soil <- ggplot(inter_cont_ci_soil, aes(x=soil_pw, y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymax=upper.CL,
+                            ymin=lower.CL))+
+        geom_hline(yintercept=1)+
+        ylab("Estimate")+
+        xlab("Contrast")+
+        coord_flip()+
+        ggtitle("C: ARD/G between genotypes")
+
+
+ggarrange(plot_RFM_1_soil,
+          ggarrange(plot_RFM_2_soil,
+                    plot_RFM_3_soil,
+                    widths = c(2:2.8)),
+          nrow=2)
+```
+
+\newpage
+
+## Soil Genotype interaction
+
+
+```{r cache=TRUE}
+# Treatments within soils
+comp_RFM_sg <- emmeans(fit_RFM, 
+                    specs="Genotype", 
+                    by="Soil",
+                    contr="pairwise",
+                    adjust="mvt",
+                    type="response")
+```
+
+```{r}
+# Means and their pointwise 95% confidence intervals
+means_RFM_sg <- data.frame(comp_RFM_sg$emmeans)
+means_RFM_sg
+```
+
+
+```{r}
+# Contrasts, p-values etc.
+contr_RFM_sg <- data.frame(comp_RFM_sg$contrasts)
+contr_RFM_sg %>% 
+        mutate(ratio=round(ratio, 3),
+               SE=round(SE, 3),
+               df=round(df, 3),
+               t.ratio=round(t.ratio, 3),
+               p.value=round(p.value, 3))
+```
+
+\newpage
+
+```{r cache=TRUE}
+# Interaction contrasts (soil_i / soil_i') between genotypes
+# estimates, p-values etc.
+inter_means_sg <- emmeans(fit_RFM, specs=c("Genotype", "Soil"))
+
+inter_cont_sg <- contrast(inter_means_sg,
+                       interaction=c(Genotype="pairwise", Soil="pairwise"),
+                       adj="mvt",
+                       type="response") 
+inter_cont_sg
+```
+
+
+
+\newpage
+
+```{r cache=TRUE}
+# Adjusted 95% CI for interaction contrasts
+# (soil_i / soil_i') between genotypes
+# Takes very long computing time
+# inter_cont_ci_sg <- confint(inter_cont_sg) %>%
+#         data.frame() %>%
+#         mutate(treat_pw=Treat_pairwise,
+#                soil_pw=Soil_pairwise,
+#                ratio=round(ratio, 3),
+#                lower.CL=round(lower.CL, 3),
+#                upper.CL=round(upper.CL, 3)) %>%
+#         select(treat_pw,
+#                soil_pw,
+#                ratio,
+#                lower.CL,
+#                upper.CL)
+# 
+# inter_cont_ci_soil
+```
+
+# Threeway interaction (Soil:Genotype:Treat)
+
+```{r cache=TRUE}
+# Simple effects: Main effect for treatment (ARD/G) + treatment:soil effects + 
+# treatment:genotype effects
+
+comp_RFM_3 <- emmeans(fit_RFM, 
+                    specs="Treat", 
+                    by=c("Soil", "Genotype"),
+                    contr="pairwise",
+                    adjust="mvt",
+                    type="response")
+
+contr_3 <- data.frame(comp_RFM_3$contrasts)
+
+contr_3 %>% 
+        mutate(ratio=round(ratio, 2),
+               SE=round(SE, 2),
+               df=round(df, 2),
+               p.value=round(p.value, 4)) %>% 
+        select(contrast,
+               Soil,
+               Genotype,
+               ratio,
+               SE,
+               df,
+               p.value)
+```
+
+```{r fig.width=10, fig.height=10, fig.cap = "\\label{fig_3_way} Estimated proportions for ARD/G for each combination of soil and genotype."}
+contr_3_ci <- data.frame(confint(comp_RFM_3$contrasts))
+
+ggplot(contr_3_ci,aes(x=contrast))+
+  theme_bw()+
+  geom_pointrange(aes(y=ratio,
+                      ymin=lower.CL,
+                      ymax=upper.CL))+
+  facet_grid(Genotype~Soil)+
+  geom_hline(yintercept=1)+
+  xlab("Contrast")+
+  ylab("Estimate")
+```
+
+\newpage
+
+In all combinations of the soils and genotypes plants grown in ARD infected substrate
+yield less root fresh mass than plants in gamma irradiated substrate (fig. \ref{fig_3_way}). All differences
+between ARD and gamma irradiated substrate are significant, since all confidence intervals
+do not cover the 1. Also none of the interaction contrasts given below is significant.
+Hence, the reduction of root fresh mass caused by the ARD infection (compared to gamma 
+irradiated substrate) is constant for all genotype-soil combinations and the
+three-way interaction is found to be absent (as already shown in the ANOVA table).
+
+
+```{r cache=TRUE}
+# Interaction contrasts
+means_3 <- emmeans(fit_RFM,
+                   specs= ~ Soil:Genotype:Treat,
+                    type="response")
+
+inter_cont_3 <- contrast(means_3,
+                       interaction=c(Genotype="pairwise", 
+                                     Soil="pairwise",
+                                     Treat="pairwise"),
+                       adj="mvt",
+                       type="response") 
+
+inter_cont_3_df <- data.frame(inter_cont_3)
+
+inter_cont_3_df %>% 
+        mutate(ratio=round(ratio, 2),
+               SE=round(SE, 2),
+               df=round(df, 2),
+               p.value=round(p.value, 2)) %>% 
+        select(Treat_pairwise,
+               Soil_pairwise,
+               Genotype_pairwise,
+               ratio,
+               SE,
+               df,
+               p.value)
+
+```
+
+
