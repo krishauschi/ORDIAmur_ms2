@@ -1,0 +1,308 @@
+---
+title: "Phytoalexins"
+author: "Hauschild et al. 2024"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE)
+
+library(tidyverse)
+library(lme4)
+library(emmeans)
+library(lmerTest)
+library(ggpubr)
+```
+
+
+# Data import
+
+```{r eval=FALSE}
+# Load packages
+library(tidyverse)
+library(lme4)
+library(emmeans)
+library(lmerTest)
+library(ggpubr)
+```
+
+```{r}
+dat <- read.csv2("WP3_Phytoalexine_t8.csv",
+                 header=TRUE,
+                 strip.white = TRUE,
+                 sep=";",
+                 dec=".")
+str(dat)
+
+dat$Table <- "1"
+dat$Table[which(dat$Block=="C")] <- "2"
+dat$Table[which(dat$Block=="D")] <- "2"
+```
+
+# Grafical overview
+
+```{r}
+ggplot(dat, aes(x=Treatment,
+                y=Phytoalexin))+
+        theme_bw()+
+        geom_jitter(aes(color=Genotype),
+                    width=0.2,
+                    alpha=0.7)+
+        facet_grid(Table+Block~Soil)
+```
+
+# Modelling
+
+
+```{r}
+# Model on response scale
+fit_resp <- lmer(Phytoalexin ~ Treatment*Genotype* Soil+
+                    (1|Table) + (1|Table:Block)+
+                    (1|Table:Treatment) + (1|Table:Block:Treatment)+
+                    (1|Table:Genotype) + (1|Table:Block:Genotype)+
+                    (1|Table:Soil) + (1|Table:Block:Soil),
+            data=dat)
+```
+
+Residual variance increases with fitted values.
+```{r}
+plot(fit_resp)
+```
+
+
+```{r}
+# Add 1 to each observation to overcome log(0)
+dat$Phyto1 <- dat$Phytoalexin+1
+
+# Model on log1p-scale
+fit <- lmer(log(Phyto1) ~ Treatment*Genotype* Soil+
+                    (1|Table) + (1|Table:Block)+
+                    (1|Table:Treatment) + (1|Table:Block:Treatment)+
+                    (1|Table:Genotype) + (1|Table:Block:Genotype)+
+                    (1|Table:Soil) + (1|Table:Block:Soil),
+            data=dat)
+```
+
+The zeros (ones) are clearly visible in the residuals vs. fitted plot, but residual
+variance seems to be relatively homogeneous.
+```{r}
+plot(fit)
+```
+
+Several interactions between main effects and randomization structures play a role.
+```{r}
+print(VarCorr(fit) ,comp=c("Variance","Std.Dev."), digits=2)
+```
+
+# ANOVA
+
+```{r}
+anova(fit, ddf = "Kenward-Roger")
+```
+
+The treatment:soil interaction is significant as well as the interaction between
+genotype and soil.
+
+# Mean comparisons
+
+## Treatment soil interaction
+
+```{r cache=TRUE}
+# simple contrasts treatment + soil:treatment effects
+comp_ts_simple <- emmeans(fit,
+                   specs="Treatment",
+                   by="Soil",
+                   contr="pairwise",
+                   adjust="mvt",
+                   type="response")
+```
+
+```{r}
+# Means on response scale
+means_ts_simple <- data.frame(comp_ts_simple$emmeans) %>% 
+        mutate(response=response-1)
+
+means_ts_simple
+```
+
+```{r cache=TRUE}
+# Conrtasts on y+1 scale
+contr_ts_simple <- data.frame(confint(comp_ts_simple$contrasts))
+contr_ts_simple
+```
+
+
+```{r cache=TRUE}
+# interaction contrasts
+means_ts_inter <- emmeans(fit, 
+                         specs=c("Treatment", "Soil"))
+
+contr_ts_inter <- contrast(means_ts_inter,
+                       interaction=c(Treatment="pairwise",
+                                     Soil="pairwise"),
+                       adj="mvt",
+                       type="response") %>% 
+        confint() %>%
+        data.frame() %>% 
+        mutate(ratio=round(ratio, 2),
+               SE=round(SE, 2),
+               df=round(df, 2),
+               lower.CL=round(lower.CL, 2),
+               upper.CL=round(upper.CL, 2))
+
+contr_ts_inter
+```
+
+
+```{r echo=FALSE, fig.width=10, fig.height=10, fig.cap = "\\label{fig_ts_inter} Phytoalexines for the genotype soil interaction. A: Average phytoalexin concentration for each genotypek. B: Simple contrasts. C: Interaction contratsts.  Black bars: 95 % confidence intervals (mvt-adjusted for the mean differences in B and C). Mean comparisons are calculated as mean differences on log(y+1) scale. Mean proprtions in B and C are given on y+1 scale. Horizontal line: Visualisation of the null hypothesis."}
+means_ts_plot <- ggplot(dat, aes(x=Treatment,
+                y=Phytoalexin))+
+        theme_bw()+
+        geom_jitter(aes(color=Genotype),
+                    width=0.2,
+                    alpha=0.7)+
+        geom_pointrange(data=means_ts_simple,
+                        aes(x=Treatment,
+                            y=response,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        facet_grid(~Soil)+
+        ggtitle("A: Average phytoalexin content within treatments (on response scale)")
+
+plot_ts_simple <- ggplot(contr_ts_simple,
+                         aes(x=contrast,
+                             y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept = 1)+
+        facet_grid(Soil~.)+
+        scale_y_continuous(trans="log10")+
+        coord_flip()+
+        ggtitle("B: Simple contrasts between treatments \n within genotypes (on y+1 scale)")
+        
+        
+
+plot_ts_inter <- ggplot(contr_ts_inter,
+                        aes(x=Soil_pairwise,
+                            y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept = 1)+
+        facet_grid(Treatment_pairwise~.)+
+        scale_y_continuous(trans="log10")+
+        coord_flip()+
+        ggtitle("C: Interaction contrasts (on y+1 scale)")
+
+ggarrange(means_ts_plot,
+          ggarrange(plot_ts_simple,
+                    plot_ts_inter,
+                    widths = c(2:2.8)),
+          nrow=2)
+```
+
+\newpage
+
+## Genotype soil interaction
+
+```{r cache=TRUE}
+# simple contrasts genotype + soil:genotype effects
+comp_gs_simple <- emmeans(fit,
+                   specs="Genotype",
+                   by="Soil",
+                   contr="pairwise",
+                   adjust="mvt",
+                   type="response")
+```
+
+```{r}
+# Means on response scale
+means_gs_simple <- data.frame(comp_gs_simple$emmeans) %>% 
+        mutate(response=response-1)
+
+means_gs_simple
+```
+
+```{r cache=TRUE}
+# Conrasts on y+1 scale
+contr_gs_simple <- data.frame(confint(comp_gs_simple$contrasts))
+contr_gs_simple
+```
+
+
+```{r cache=TRUE}
+# interaction contrasts
+means_gs_inter <- emmeans(fit, 
+                         specs=c("Genotype", "Soil"))
+
+contr_gs_inter <- contrast(means_gs_inter,
+                       interaction=c(Genotype="pairwise",
+                                     Soil="pairwise"),
+                       adj="mvt",
+                       type="response") %>% 
+        confint() %>%
+        data.frame() %>% 
+        mutate(ratio=round(ratio, 2),
+               SE=round(SE, 2),
+               df=round(df, 2),
+               lower.CL=round(lower.CL, 2),
+               upper.CL=round(upper.CL, 2))
+
+contr_gs_inter
+```
+
+
+```{r echo=FALSE, fig.width=10, fig.height=10, fig.cap = "\\label{fig_gs_inter} Phytoalexines for the genotype soil interaction. A: Average phytoalexin concentration for each genotypek. B: Simple contrasts. C: Interaction contratsts.  Black bars: 95 % confidence intervals (mvt-adjusted for the mean differences in B and C). Mean comparisons are calculated as mean differences on log(y+1) scale. Mean proprtions in B and C are given on y+1 scale. Horizontal line: Visualisation of the null hypothesis."}
+means_gs_plot <- ggplot(dat, aes(x=Genotype,
+                y=Phytoalexin))+
+        theme_bw()+
+        geom_jitter(aes(color=Treatment),
+                    width=0.2,
+                    alpha=0.7)+
+        geom_pointrange(data=means_gs_simple,
+                        aes(x=Genotype,
+                            y=response,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        facet_grid(~Soil)+
+        ggtitle("A: Average phytoalexin content within soils (on response scale)")
+
+plot_gs_simple <- ggplot(contr_gs_simple,
+                         aes(x=contrast,
+                             y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept = 1)+
+        facet_grid(Soil~.)+
+        scale_y_continuous(trans="log10")+
+        coord_flip()+
+        ggtitle("B: Simple contrasts between Genotypes \n within soils (on y+1 scale)")
+        
+        
+
+plot_gs_inter <- ggplot(contr_gs_inter,
+                        aes(x=Soil_pairwise,
+                            y=ratio))+
+        theme_bw()+
+        geom_pointrange(aes(y=ratio,
+                            ymin=lower.CL,
+                            ymax=upper.CL))+
+        geom_hline(yintercept = 1)+
+        facet_grid(Genotype_pairwise~.)+
+        scale_y_continuous(trans="log10")+
+        coord_flip()+
+        ggtitle("C: Interaction contrasts (on y+1 scale)")
+
+ggarrange(means_gs_plot,
+          ggarrange(plot_gs_simple,
+                    plot_gs_inter,
+                    widths = c(2:2.8)),
+          nrow=2)
+```
+
