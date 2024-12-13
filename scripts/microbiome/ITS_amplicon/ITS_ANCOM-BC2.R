@@ -2,10 +2,8 @@
 # https://www.bioconductor.org/packages/release/bioc/vignettes/ANCOMBC/inst/doc/ANCOMBC.html
 #ANCOM-BC2
 # https://www.bioconductor.org/packages/release/bioc/vignettes/ANCOMBC/inst/doc/ANCOMBC2.html
-#if (!require("BiocManager", quietly = TRUE))
-#  install.packages("BiocManager")
-#BiocManager::install("mia")
 
+#load packages
 library(ANCOMBC)       
 library(microbiome)    # includes vegan package 
 library(dplyr)   
@@ -17,12 +15,11 @@ options(DT.options = list(
                     "$(this.api().table().header()).css({'background-color': 
   '#000', 'color': '#fff'});","}")))
 library("phyloseq")
-library("vegan")
+#library("vegan")
 library("ggpubr")
-library("Matrix")
+#library("Matrix")
 
-
-#Input data is the phyloseq object with raw count data (go to script "ITS_phyloseq" for code to create the psO)
+#Input data is the phyloseq object with raw count data with refined taxonomy (obtained from script "ITS_reaname_NAs.R")
 #To compare differential abundances between genotypes within each site, individually, create subsets of the psO
 
 ###subset site EH
@@ -322,5 +319,8 @@ write.table(res_prim_RU_26, file = "WP3_ITS_ANCOM-BC2_annot_resprim_M26_RU_rand_
             row.names = TRUE, col.names = TRUE)
 res_global_RU_26 = output_RU_26$res_global
 #View(res_global_RU_26)
+
+#from the output files taxa were filtered that were identified significantly different (q<0.05) between genotypes and that passed sensitivity analysis to ensure false positives can be excluded. 
+#to display relative abundances of differential taxa go to script "boxplots_diff_taxa.R"  
 write.table(res_global_RU_26, file = "WP3_ITS_ANCOM-BC2_annot_resglob_M26_RU_rand_formula.csv", append = FALSE, sep = " ", dec = ".",
             row.names = TRUE, col.names = TRUE)
