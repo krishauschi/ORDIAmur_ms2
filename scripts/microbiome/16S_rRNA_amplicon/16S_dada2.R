@@ -1,9 +1,4 @@
-#if (!require("BiocManager", quietly = TRUE))
-#  install.packages("BiocManager")
-#BiocManager::install("dada2")
-#BiocManager::install("ShortRead")  
-#BiocManager::install("Biostrings") 
-#BiocManager::install("phyloseq")
+#the sequence raw data for ITS sequencing can be found at the NCBI SRA under Biopreoject PRJNA1149964
 
 library(dada2)
 library(ShortRead)
@@ -129,3 +124,5 @@ write.csv(taxa, "~/WP3/WP3_dada/dada2_output/WP3_taxa_UNITE9.0_table.csv")
 #taxa <- assignTaxonomy(seqtab.nochim, "~/WP3/WP3_dada/database/silva_nr99_v138.1_train_set.fa.gz", multithread=TRUE)
 #taxa <- addSpecies(taxa, "~/WP3/WP3_dada/database/silva_species_assignment_v138.1.fa.gz")
 #write.csv(taxa, "~/WP3/WP3_dada/dada2_output/WP3_taxa_species_silva138_table.csv")
+
+#the output .csv tables can now be used for phyloseq analysis
