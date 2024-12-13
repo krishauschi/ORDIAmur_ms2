@@ -1,9 +1,4 @@
-#if (!require("BiocManager", quietly = TRUE))
-#  install.packages("BiocManager")
-#BiocManager::install("dada2")
-#BiocManager::install("ShortRead")  
-#BiocManager::install("Biostrings") 
-#BiocManager::install("phyloseq")
+#the sequence raw data for ITS sequencing can be found at the NCBI SRA under Biopreoject PRJNA1149964
 
 library(dada2)
 library(ShortRead)
@@ -122,3 +117,4 @@ save.image(file = "~/WP3/WP3_dada_ITS/dada2_output/dada2_WP3_ITSseq.RData")
 taxa <- assignTaxonomy(seqtab.nochim, "~/WP3/WP3_dada_ITS/database/sh_general_release_16.10.2022.fasta", minBoot = 0, outputBootstraps = TRUE, multithread=TRUE)
 write.csv(taxa, "~/WP3/WP3_dada_ITS/dada2_output/WP3_taxa_UNITE_table.csv")
 
+#the output .csv tables can now be used as input files for phyloseq analysis
