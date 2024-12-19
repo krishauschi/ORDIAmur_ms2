@@ -1,3 +1,34 @@
+# create dataframe with alpha-diversity measures calculated in phyoseq from the rarefied phyoseq object with cleaned taxonomy
+# required packages
+library("phyloseq")
+library("vegan")
+library("microbiome")
+library("ggplot2")
+library("ggpubr")
+# export a data.frame containig a number of standard alpha diversity estimates using the phyloseq function estimate_richness()
+rich = estimate_richness(psO_WP3_16S_raref)
+rich
+write.csv(rich, "~/WP3/WP3_16S_phyloseq/df_psO_WP3_16S_estimate_richness.csv")
+# plot Shannon indices in boxplots  
+alpha_divs <- read.table("df_psO_WP3_16S_estimate_richness.txt", row.names=1, header=TRUE, sep="\t")
+View(alpha_divs)
+# reorder by genotypes 
+level_order <- c('M.26', 'MAL0130', 'MAL0739')
+# Ensure 'soil' is a factor with the desired order
+alpha_divs$site <- factor(alpha_divs$site, levels = c('HG', 'EH', 'RU'))
+# Plot with reordered legend
+ggplot(data=alpha_divs, aes(x=factor(rootstock, levels=level_order), y=Shannon, fill=site)) +
+  stat_boxplot(geom="errorbar") +
+  geom_boxplot(size = 0.3) +
+  scale_fill_manual(values = c( "#DFA398","#41917C", "#505778")) +  # Colors mapped to 'soil' levels in the specified order
+  facet_grid(~site) +  
+  labs(x= "", y= "Shannon", title= "Bacteria") + 
+  theme_bw(base_size = 15) +
+  scale_x_discrete(guide = guide_axis(angle = 45))+
+  scale_y_continuous(limits = c(4, 8), breaks = seq(4, 8, by = 1), label = c("4", "5", "6", "7", "8"))
+ggsave("WP3_16S_boxplot_Shannon_fill.png", width = 6, height = 3.80, units = "in")
+
+# statistical evaluation of bacterial Shannon indices
 ---
 title: "Shanon index (alpha diversity)"
 author: "Hauschild et al. 2024"
