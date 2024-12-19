@@ -20,9 +20,8 @@ library("vegan")
 library("ggpubr")
 library("Matrix")
 
-#Input data is the phyloseq object with raw count data (go to script "16S_phyloseq" for code to create the psO)
+#Input data is the phyloseq object with cleaned raw count data and filled taxonomy tables (output from script "16S_rename_NAs")
 #To compare differential abundances between genotypes within each site, individually, create subsets of the psO
-
 
 ###subset site EH
 #subset_site Ellerhoop EH
