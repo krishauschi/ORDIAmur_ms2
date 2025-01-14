@@ -14,10 +14,12 @@ Analyses were performed in R version 4.3.2
 
 ### Corlor code (HEX):
 Different colors label samples from soils that originate from different sites: 
+- ![#DFA398](https://placehold.co/15x15/DFA398/DFA398.png) `#DFA398` Heidgraben (HG)
 - Heidgraben (HG): `#DFA398`
 - Holm (HO): `#41917C`
 - Ellerhoop (EH): `#505778`
 - Pillnitz (PI): `#883b41`
 - Ruthe (RU): `#A9D284`
 - Meckenheim (ME): `#A0A5C0`
+
 
