@@ -1,4 +1,4 @@
-## GitHub Repository for ORDIAmur_ms2 - Hauschild, Orth et al. 
+## GitHub Repository for ORDIAmur_ms2 - Hauschild, Orth et al. 2025, Phytobiomes J
 Analyses were performed in R version 4.3.2
 ### R packages:
 - tidyverse (Wickham et al. 2019)
