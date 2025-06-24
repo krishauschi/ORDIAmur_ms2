@@ -15,7 +15,7 @@ Analyses were performed in R version 4.3.2
 - RColorBrewer (Neuwirth 2022)
 - ggpubr (Kassambara 2023)
 
-### Corlor code (HEX):
+### Color code (HEX):
 Different colors label samples from soils that originate from different sites: 
 - ![#DFA398](https://placehold.co/15x15/DFA398/DFA398.png) `#DFA398` Heidgraben (HG)
 - ![#883b41](https://placehold.co/15x15/883b41/883b41.png) `#883b41` Holm (HO)
